@@ -78,6 +78,7 @@ func Arrange(folderPath, timeformat string) {
 	}
 
 	RemoveEmptyFolder(folderPath)
+	AddCountToName(folderPath)
 }
 
 func GetPhotoExif(fname string) (IfdEntryMap, error) {
