@@ -21,7 +21,6 @@ func IsDirEmpty(name string) (bool, error) {
 	return false, err // Either not empty or error, suits both cases
 }
 
-
 func RemoveEmptyFolder(folderPath string) {
 	directoryList := make([]string, 0)
 	err := filepath.Walk(folderPath,

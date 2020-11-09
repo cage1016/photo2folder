@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -48,25 +49,32 @@ func Arrange(folderPath, timeformat string) {
 	mask := syscall.Umask(0) // 改为 0000 八进制
 	defer syscall.Umask(mask)
 
-	//
+	ff := map[string]string{}
+	newFolderList := map[string]int{}
 	err := filepath.Walk(folderPath,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 
-			if !info.IsDir() {
+			if info.Name() == ".DS_Store" {
+				os.Remove(path)
+				return nil
+			}
+
+			if !strings.HasSuffix(folderPath, info.Name()) && !info.IsDir() {
 				IfdEntries, err := GetPhotoExif(path)
 				if err == nil {
 					if m, ok := IfdEntries["DateTimeOriginal"]; ok {
 						taken, _ := time.Parse("2006:01:02 15:04:05", m.ValueString)
-
 						newFolder := fmt.Sprintf("%s/%s", folderPath, taken.Format(timeformat))
-						_ = os.MkdirAll(newFolder, 0766)
-						newFile := fmt.Sprintf("%s/%s", newFolder, info.Name())
-						os.Rename(path, newFile)
-
-						fmt.Println(fmt.Sprintf("%s → %s", path, newFile))
+						newFolderList[newFolder] = newFolderList[newFolder] + 1
+						ff[path] = newFolder
+					} else {
+						taken := x(path)
+						newFolder := fmt.Sprintf("%s/%s", folderPath, taken.Format(timeformat))
+						newFolderList[newFolder] = newFolderList[newFolder] + 1
+						ff[path] = newFolder
 					}
 				}
 			}
@@ -74,11 +82,51 @@ func Arrange(folderPath, timeformat string) {
 		})
 
 	if err != nil {
-		fmt.Print(err)
+		fmt.Println(err)
+	}
+
+	for k, v := range newFolderList {
+		os.MkdirAll(fmt.Sprintf("%s_%d", k, v), 0766)
+		for k1, v1 := range ff {
+			b := fmt.Sprintf("%s_%d", k, v)
+			buf := fmt.Sprintf("%s/%s", b, lastString(strings.Split(k1, "/")))
+			ff[k1] = strings.Replace(v1, k, buf, -1)
+		}
+	}
+
+	for k, v := range ff {
+		if !strings.HasPrefix(k, v) {
+			err := os.Rename(k, v)
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println(k, " → ", v)
+			}
+		} else {
+
+		}
 	}
 
 	RemoveEmptyFolder(folderPath)
-	AddCountToName(folderPath)
+}
+
+func lastString(ss []string) string {
+	return ss[len(ss)-1]
+}
+
+func x(filename string) time.Time {
+	file, err := os.Stat(filename)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	stat_t := file.Sys().(*syscall.Stat_t)
+	return timespecToTime(stat_t.Birthtimespec)
+}
+
+func timespecToTime(ts syscall.Timespec) time.Time {
+	return time.Unix(int64(ts.Sec), int64(ts.Nsec))
 }
 
 func GetPhotoExif(fname string) (IfdEntryMap, error) {
